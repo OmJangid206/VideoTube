@@ -93,9 +93,11 @@ Testing App
 Deployement
 -----------------------------------------------
 
-Free API Understand: https://freeapi.app 
+Free API Understand: [https://freeapi.app] 
 
+Readme.md:[https://www.geeksforgeeks.org/what-is-readme-md-file]
 
+[https://github.com/PacktPublishing/Build-Full-Stack-Projects-with-FARM-stack/blob/main/fastapi-mongodb-crudapp/config/database.py]
 
 
 
