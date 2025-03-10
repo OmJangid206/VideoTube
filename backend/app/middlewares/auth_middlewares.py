@@ -56,6 +56,6 @@ def veryfy_jwt(request: Request) -> None:
             raise HTTPException(status_code=401, detail="Invalid access token")
 
         request.state.user = user
-
+        print(f"request.state.user: {request.state.user}") # :DEBUGING
     except Exception as err:
         raise HTTPException(status_code=401, detail=f"Invalid access token: {err}") from err
