@@ -19,7 +19,7 @@ from app.utils.api_response import ApiResponse
 
 load_dotenv()
 
-client, database, user_collection = connect_db()
+client, database = connect_db()
 
 ACCESS_TOKEN_SECRET = os.environ['ACCESS_TOKEN_SECRET']
 ACCESS_TOKEN_EXPIRY = os.environ['ACCESS_TOKEN_EXPIRY_DAY']
@@ -91,6 +91,7 @@ def generate_access_and_refresh_token(user_id: str) -> tuple:
         HTTPException: If there is an error while generating the tokens.
     """
     try:
+        user_collection = database["users"]
         user = user_collection.find_one({"_id":user_id})
         access_token = generate_access_token(user)
         refresh_token = generate_refresh_token(user)
@@ -122,6 +123,7 @@ def refresh_access_token(request: Request, response: Response) -> ApiResponse:
     try:
         decoded_token = jwt.decode(incoming_refresh_token, REFRESH_TOKEN_SECRET, algorithms="HS256")
 
+        user_collection = database["users"]
         user = user_collection.find_one({"_id": decoded_token.get("_id")})
 
         if not user:

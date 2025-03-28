@@ -15,8 +15,8 @@ from app.db.mongodb_handler import connect_db
 from app.app import app
 
 load_dotenv()
-client, database, collection = connect_db()
+client, database = connect_db()
 
 print("🚀 Server is running at http://127.0.0.1:8000/api/v1")
 
-uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+uvicorn.run(app, host="127.0.0.1", port=8000, log_level="debug")

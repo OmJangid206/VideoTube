@@ -100,6 +100,3 @@ Readme.md:[https://www.geeksforgeeks.org/what-is-readme-md-file]
 [https://github.com/PacktPublishing/Build-Full-Stack-Projects-with-FARM-stack/blob/main/fastapi-mongodb-crudapp/config/database.py]
 
 [https://devuiv2.vercel.app/templates]
-
-
-

@@ -27,14 +27,14 @@ def connect_db() -> tuple:
 
         # client.admin.command("ping")
         database = client.get_database(DB_NAME)
-        collection = database.get_collection(COLLECTION_NAME)
+        # collection = database.get_collection(COLLECTION_NAME)
 
         time.sleep(1)
         print(f"\n MongoDB connected! Connected Hosts: {client.nodes}")
         # print(f"\n MongoDB connected !! DB HOST: {client.address[0]}")
 
         # client.close()
-        return client, database, collection
+        return client, database
 
     except ConnectionFailure as error:
         raise Exception(f"MONGODB connection FAILED: {error}")

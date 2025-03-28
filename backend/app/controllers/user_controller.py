@@ -1,8 +1,12 @@
 """
 user_controller.py
 
-This module handles user registration, login, and logout functionality, including password hashing, 
-user validation, file uploads to Cloudinary, token generation, and cookie management.
+This module manages user authentication and profile management, including:
+- User registration, login, and logout functionalities
+- Password hashing and verification
+- User data validation
+- File uploads to Cloudinary
+- Token generation and cookie management
 """
 
 import os
@@ -21,7 +25,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], bcrypt__rounds=12, deprecated="au
 
 def convert_formdata_to_json(form_data):
     """
-    Converts form data to a dictionary.
+    Args:
+        form_data (FormData): Incoming form data to be converted.
+
+    Returns:
+        dict: A dictionary representation of the form data.
     """
     form_data_dict = {}
     for key, value in form_data.items():
@@ -31,14 +39,23 @@ def convert_formdata_to_json(form_data):
 
 def hash_password(password):
     """
-    Hashes the provided password using bcrypt.
+    Args:
+        password (str): The plain-text password to be hashed.
+
+    Returns:
+        str: The hashed password.
     """
     return pwd_context.hash(password)
 
 
 def is_password_correct(password, hashed_password):
     """
-    Verifies if the provided password matches the hashed password.
+    Args:
+        password (str): The plain-text password to verify.
+        hashed_password (str): The previously hashed password to compare against.
+
+    Returns:
+        bool: True if passwords match, False otherwise.
     """
     return pwd_context.verify(password, hashed_password)
 
@@ -48,30 +65,26 @@ async def register_user(
         avatar: UploadFile = File(...), cover_image: 
         Optional[UploadFile] = File(None, alias="coverImage")) -> ApiResponse:
     """
-    Registers a new user, validates input, checks for existing users, uploads files to Cloudinary,
-    and saves the user to the database.
+    Workflow:
+    1. Validates all required user fields
+    2. Checks for existing users with same username or email
+    3. Uploads avatar and optional cover image to Cloudinary
+    4. Hashes user password
+    5. Creates user record in database
+    6. Returns user details (excluding sensitive information)
 
     Args:
-        request (Request): The request object containing user details.
-        avatar (UploadFile): The avatar image file.
-        cover_image (Optional[UploadFile]): The cover image file.
+        request (Request): The HTTP request containing user registration details.
+        avatar (UploadFile): Required avatar image file for the user.
+        cover_image (Optional[UploadFile], optional): Optional cover image for user profile.
 
     Returns:
-        ApiResponse: Response object with user data and success message.
+        ApiResponse: Response containing registered user details and success message.
     """
-    # get user details from frontend
-    # validation - not empty
-    # check if user already exists: username, email
-    # check for images, check for avatar
-    # upload them to cloudinary
-    # create user object - create entry in db
-    # remove password and refresh token field from response
-    # check for user creation
-    # return response
 
     # initialization collection
-    client, database, collection = connect_db()
-    users_collection = collection
+    client, database = connect_db()
+    users_collection = database["users"]
 
     form_data = await request.form()
     request = convert_formdata_to_json(form_data)
@@ -135,27 +148,29 @@ async def register_user(
 
 async def login_user(request: Request, response: Response) -> ApiResponse:
     """
-    Authenticates a user using their username or email and password, and returns access and refresh tokens.
+    Workflow:
+    1. Validates login credentials (username or email)
+    2. Verifies user existence
+    3. Checks password correctness
+    4. Generates access and refresh tokens
+    5. Sets HTTP-only, secure cookies
+    6. Returns user details and tokens
 
     Args:
-        request (Request): The request object containing login credentials.
-        response (Response): The response object to set cookies for access and refresh tokens.
+        request (Request): The HTTP request containing login credentials.
+        response (Response): HTTP response for setting authentication cookies.
 
     Returns:
-        ApiResponse: Response object with user data, access token, and refresh token.
+        ApiResponse: Response with user details, access token, and refresh token.
     """
-    # validate email username pasword
-    # check username or email in db
-    # validate password match or not
-    # logIn the user and send response
 
     request = await request.json()
 
     if not (request.get("username") or request.get("email")):
         raise HTTPException(400, detail="username or email is required")
 
-    client, database, collection = connect_db()
-    user_collection = collection
+    client, database = connect_db()
+    user_collection = database["users"]
 
     user = user_collection.find_one({
         "$or":[{"username": request.get("username")}, {"email": request.get("email")}]
@@ -168,7 +183,7 @@ async def login_user(request: Request, response: Response) -> ApiResponse:
     if not is_validate_password:
         raise HTTPException(401, detail="Invalid user credentials")
 
-    access_token, refresh_token= generate_access_and_refresh_token(user.get("_id"))
+    access_token, refresh_token = generate_access_and_refresh_token(user.get("_id"))
 
     logged_in_user = user_collection.find_one({"_id": user.get("_id")}, {"password":0, "refreshToken":0})
     logged_in_user["_id"] = str(logged_in_user["_id"])
@@ -189,17 +204,20 @@ async def login_user(request: Request, response: Response) -> ApiResponse:
 
 async def logout_user(request: Request, response: Response) -> ApiResponse:
     """
-    Logs out the user by deleting the refresh and access tokens from cookies.
+    Workflow:
+    1. Removes refresh token from user record
+    2. Deletes access and refresh token cookies
 
     Args:
-        request (Request): The request object containing the logged-in user's data.
-        response (Response): The response object to remove cookies.
+        request (Request): The HTTP request with logged-in user's context.
+        response (Response): HTTP response for deleting authentication cookies.
 
     Returns:
-        ApiResponse: Response object with a success message for logout.
+        ApiResponse: Confirmation of successful logout.
     """
-    client, database, collection = connect_db()
-    user_collection = collection
+    client, database = connect_db()
+    user_collection = database["users"]
+    
     try:
         user_collection.find_one_and_update(
             {"_id": ObjectId(request.state.user.get("_id"))},
@@ -220,7 +238,19 @@ async def logout_user(request: Request, response: Response) -> ApiResponse:
 
 
 async def change_password(request: Request) -> ApiResponse:
+    """
+    Workflow:
+    1. Validates all password change fields
+    2. Ensures new password differs from old password
+    3. Verifies current password
+    4. Updates password with new hashed password
 
+    Args:
+        request (Request): HTTP request containing password change details.
+
+    Returns:
+        ApiResponse: Confirmation of successful password update.
+    """
     request_body= await request.json()
 
     if not all([request_body.get("oldPassword"),request_body.get("newPassword"), request_body.get("confirmPassword")]):
@@ -232,8 +262,8 @@ async def change_password(request: Request) -> ApiResponse:
     if request_body.get("oldPassword") == request_body.get("newPassword"):
         raise HTTPException(status_code=400, detail="New Password cannot be same as old Password")
     
-    client, database, collection  = connect_db()
-    user_collection = collection
+    client, database  = connect_db()
+    user_collection = database["users"]
 
     user = user_collection.find_one(
         {"_id": ObjectId(request.state.user.get("_id"))}
@@ -255,24 +285,22 @@ async def change_password(request: Request) -> ApiResponse:
         "password updated successfully."
     )
 
-    # validate Fields
-    # check old password exists 
-    # compaire new password with old passowrd 
-    # passowrd1 and passowrd1 should be same 
-    # update password with new password
-
-    # vailidate email
-    # find the user by email sotre token for passwrod token with expiration
-    # send the email for change the password with token
-    # click on email redirect on change-password path find user by token also validate if expire or not
-    # find the user by token update the password with new one when submit and also delete token in db one updated password
-
 
 async def get_current_user(request: Request) -> ApiResponse:
+    """
+    Retrieve the current authenticated user's profile information.
 
-    # find the user in db by username
-    # return ApiResponse
+    This function extracts key user details from the authenticated request,
+    providing a secure way to fetch the current user's profile without 
+    exposing sensitive information.
 
+    Args:
+        request (Request): HTTP request with user authentication context.
+            Contains user information in the request state.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
     current_user = {
         "username": request.state.user.get("username"),
         "email": request.state.user.get("email"),
@@ -288,18 +316,26 @@ async def get_current_user(request: Request) -> ApiResponse:
 
 
 async def update_account_details(request: Request) -> ApiResponse:
-    
-    # validate Fields 
-    # find by userid and update in db
-    # return updated Data 
+    """
+    Update the user's account details, including full name and email.
 
+    This function validates and updates the user's account information 
+    in the database, ensuring all required fields are present.
+
+    Args:
+        request (Request): HTTP request containing updated account details.
+            Expected to have a JSON body with 'fullName' and 'email'.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
     request_body = await request.json()
 
     if not all([request_body.get("fullName"),request_body.get("email")]):
         raise HTTPException(status_code=400, detail="All fields are required")
 
-    client, database, collection  = connect_db()
-    user_collection = collection
+    client, database  = connect_db()
+    user_collection = database["users"]
 
     user = user_collection.find_one_and_update(
         {"_id": ObjectId(request.state.user.get("_id"))},
@@ -321,9 +357,25 @@ async def update_account_details(request: Request) -> ApiResponse:
 
 
 async def update_avatar(request: Request, avatar: UploadFile = File(...)) -> ApiResponse:
-    
-    client, database, collection  = connect_db()
-    user_collection = collection
+    """
+    Update the user's profile avatar image.
+
+    Handles avatar image upload process:
+    1. Validates avatar file
+    2. Saves file to temporary directory
+    3. Uploads to Cloudinary
+    4. Updates user's avatar in database
+
+    Args:
+        request (Request): HTTP request with user authentication context.
+        avatar (UploadFile): New avatar image file to be uploaded.
+            Defaults to File(...) which requires a file to be present.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
+    client, database = connect_db()
+    user_collection = database["users"]
 
     if not avatar.filename:
         raise HTTPException(status_code=401, detail="Avatar file is missing")
@@ -359,18 +411,28 @@ async def update_avatar(request: Request, avatar: UploadFile = File(...)) -> Api
 
 
 async def update_cover_image(request: Request, cover_image: UploadFile = File(...)) -> ApiResponse:
-    
-    # validate Fields
-    # find in db 
-    # save in folder path 
-    # upload in cloudinary
-    # return with updated user
+    """
+    Update the user's profile cover image.
 
+    Handles cover image upload process:
+    1. Validates cover image file
+    2. Saves file to temporary directory
+    3. Uploads to Cloudinary
+    4. Updates user's cover image in database
+
+    Args:
+        request (Request): HTTP request with user authentication context.
+        cover_image (UploadFile): New cover image file to be uploaded.
+            Defaults to File(...) which requires a file to be present.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
     if not cover_image:
         raise HTTPException(status_code=401, detail="cover image file is missing")
     
-    client, database, collection = connect_db()
-    user_collection = collection
+    client, database = connect_db()
+    user_collection = database["users"]
 
     if not os.path.exists("public/temp"):
         os.mkdir("public/temp")
@@ -404,16 +466,26 @@ async def update_cover_image(request: Request, cover_image: UploadFile = File(..
 
 
 async def get_user_channel_profile(username: str, request: Request) -> ApiResponse:
-    # get the param username
-    # find by username
+    """
+    Retrieve a user's channel profile with comprehensive subscription information.
 
+    Performs a complex aggregation to fetch user profile details, 
+    including subscriber and subscription metrics.
+
+    Args:
+        username (str): The username of the channel to retrieve.
+        request (Request): HTTP request with user authentication context.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
     if not username.strip():
         raise HTTPException(status_code=400, detail="Username is missing")
     
     # Connect to the database
-    client, database, collection = connect_db()
+    client, database = connect_db()
     user_collection = database["users"]
-    subscriptions_collection = database["subscriptions"]
+    # subscriptions_collection = database["subscriptions"]
 
     # Perform aggregation
     channel = user_collection.aggregate([
@@ -448,12 +520,9 @@ async def get_user_channel_profile(username: str, request: Request) -> ApiRespon
                 },
                 "isSubscribed": {
                     "$cond": {
-                        "if": {
-                            "$in": { [ObjectId(request.state.user["_id"]), "subscribers.subscriber"] 
-                            },
+                        "if": { "$in": [ObjectId(request.state.user["_id"]), "$subscribers.subscriber"] },
                         "then": True,
                         "else": False
-                        }
                     }
                 }
             }
@@ -473,6 +542,9 @@ async def get_user_channel_profile(username: str, request: Request) -> ApiRespon
     ])
 
     # channel = list(user_collection.aggregate(pipeline))
+    channel = list(channel)
+    user_id = channel[0].get('_id')
+    channel[0]['_id'] = str(user_id)
 
     if not channel:
         raise HTTPException(status_code=404, detail="Chnannel does not exist")
@@ -484,9 +556,103 @@ async def get_user_channel_profile(username: str, request: Request) -> ApiRespon
     )
 
 
-async def get_user_watch_history():
-    pass
+async def get_user_watch_history(request: Request) -> ApiResponse:
+    """
+    Retrieve the authenticated user's watch history with detailed video information.
 
+    Performs an aggregation to fetch watch history, including:
+    - Watched videos
+    - Detailed video owner information
+
+    Args:
+        request (Request): HTTP request with user authentication context.
+
+    Returns:
+        ApiResponse: A response object containing:
+    """
+    client, database = connect_db()
+    user_collection = database["users"]
+
+    user = user_collection.aggregate([
+        {
+            "$match": {
+                "_id": request.state.user["_id"]
+            }
+        },
+        {
+            "$lookup": {
+                "from": "videos",
+                "localField": "watchHistory",
+                "foreignField": "_id",
+                "as": "watchHistory",
+                "pipeline": [
+                    {
+                        "$lookup": {
+                            "from": "users",
+                            "localField": "owner",
+                            "foreignField": "_id", 
+                            "as": "owner",
+                            "pipeline": [
+                                {
+                                    "$project": {
+                                        "fullName": 1,
+                                        "username": 1,
+                                        "avatar": 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "owner": {
+                                "$first": "$owner"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    user = list(user)
+    user_id = user[0].get('_id')
+    user[0]['_id'] = str(user_id)
+
+    return ApiResponse(
+        status_code=200,
+        data=user,
+        message="User watchHistory fetched successfully"
+    )
+
+
+
+# validate Fields
+# check old password exists 
+# compaire new password with old passowrd 
+# passowrd1 and passowrd1 should be same 
+# update password with new password
+
+# vailidate email
+# find the user by email sotre token for passwrod token with expiration
+# send the email for change the password with token
+# click on email redirect on change-password path find user by token also validate if expire or not
+# find the user by token update the password with new one when submit and also delete token in db one updated password
+
+####################################
+# Watchhistory
+# user collection
+# username | _id | watchhistory | 
+# om       | 1   | video_1      | 
+# om       | 1   | video_2      | 
+# om       | 1   | video_3      |
+
+# video_1 = {
+#     "ower": "_id",
+#     "username" = "username",
+#     "name" = "name"
+#   "avatar_img": "avatarImg"
+# }
 
 # update_password
 # get_current_user
@@ -496,3 +662,18 @@ async def get_user_watch_history():
 # update_user_account_details
 # get_user_watch_history
 
+# users collection
+# | username | _id | other_details |
+# | om       | 1   | xyz           |
+# | dev      | 2   | abc           |
+# | ashok    | 3   | xyz           |
+
+# subscriptions collection
+#  | channel   | subscriber  |
+#  | 1 (om)    | 2 (dev)     |
+#  | 1 (om)    | 3 (ashok)   |
+#  | 2 (dev)   | 1 (om)      |
+#  | 3 (ashok) | 1 (om)      |
+#  | 2 (dev)   | 1 (om)      |
+#  | 2 (dev)   | 1 (ashok)   |
+####################################

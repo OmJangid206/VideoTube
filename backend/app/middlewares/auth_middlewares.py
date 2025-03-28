@@ -18,10 +18,10 @@ from fastapi import Request, HTTPException
 from app.db.mongodb_handler import connect_db
 
 ACCESS_TOKEN_SECRET = os.environ['ACCESS_TOKEN_SECRET']
-client, database, user_collection = connect_db()
+client, database = connect_db()
 load_dotenv()
 
-def veryfy_jwt(request: Request) -> None:
+def verify_jwt(request: Request) -> None:
     """
     Verifies the access token in the request's cookies or Authorization header. 
     Decodes and validates the token, retrieves the corresponding user from the database, 
@@ -48,7 +48,7 @@ def veryfy_jwt(request: Request) -> None:
 
         user_id = decoded_token.get("_id")
         # print(f"user_id: {user_id}")
-
+        user_collection = database["users"]
         user = user_collection.find_one({"_id": ObjectId(user_id)}, {"password": 0, "refreshToken": 0})
         # print(f"üser: {user}")
 
