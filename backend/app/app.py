@@ -13,9 +13,12 @@ Modules:
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.utils.api_error import ApiError
 
 from app.routers.user_routes import router as user_router
+from app.routers.video_routes import router as video_router
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -35,5 +38,17 @@ app = FastAPI()
 
 # middleware
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # routes declaration
 app.include_router(user_router, prefix="/api/v1/users")
+app.include_router(video_router, prefix="/api/v1/videos")

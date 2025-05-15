@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import HTTPException, Request, Response, UploadFile, File
 from passlib.context import CryptContext
 from bson import ObjectId
+import httpx
 
 from app.db.mongodb_handler import connect_db
 from app.utils.cloudinary import upload_on_cloudinary
@@ -625,7 +626,54 @@ async def get_user_watch_history(request: Request) -> ApiResponse:
         message="User watchHistory fetched successfully"
     )
 
+GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
+#################################################
+async def google_login(request: Request, response: Response):
+    data = await request.json()
+    token = data.get("id_token")  # frontend sends Google ID token here
+    print(f"token,: {token}")
+    # Verify token with Google
+    google_resp = httpx.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
+    payload = google_resp.json()
 
+    if payload.get("aud") != GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="Invalid Google Client ID")
+
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email not found in token")
+
+    client, database = connect_db()
+    user_collection = database["users"]
+
+    user = user_collection.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User does not exist")
+
+    # generate your tokens for the user (no password check here)
+    access_token, refresh_token = generate_access_and_refresh_token(user.get("_id"))
+
+
+    logged_in_user = user_collection.find_one({"_id": user.get("_id")}, {"password":0, "refreshToken":0})
+    logged_in_user["_id"] = str(logged_in_user["_id"])
+    
+    # set cookies and respond
+    response.set_cookie("accessToken", value=access_token, httponly=True, secure=False)
+    response.set_cookie("refreshToken", value=refresh_token, httponly=True, secure=False)
+
+    # user["_id"] = str(user["_id"])
+    # user.pop("password", None)
+    # user.pop("refreshToken", None)
+
+    return ApiResponse(
+        200,
+        {
+            "user": logged_in_user,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+        },
+        "User logged in via Google successfully"
+    )
 
 # validate Fields
 # check old password exists 

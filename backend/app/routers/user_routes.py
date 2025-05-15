@@ -32,9 +32,9 @@ from app.controllers.user_controller import update_avatar
 from app.controllers.user_controller import update_cover_image
 from app.controllers.user_controller import get_user_channel_profile
 from app.controllers.user_controller import get_user_watch_history
+from app.controllers.user_controller import google_login
 
 from app.middlewares.auth_middlewares import verify_jwt
-
 
 router = APIRouter()
 
@@ -125,3 +125,8 @@ async def get_watch_history_route(request: Request):
     Gets user watch history.
     """
     return await get_user_watch_history(request)
+
+@router.post("/auth/google")
+async def google_login_route(requst : Request, response: Response):
+    print(f"requst: {requst}or {response}")
+    return await google_login(requst, response) 
