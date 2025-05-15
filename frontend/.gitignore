@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .env 
+
+# macOS system files
+.DS_Store
