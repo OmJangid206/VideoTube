@@ -22,6 +22,9 @@ from app.utils.api_response import ApiResponse
 
 from app.models.user_models import generate_access_and_refresh_token
 
+GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
+GOOGLE_TOKENINFO_URL = os.environ['GOOGLE_TOKENINFO_URL']
+
 pwd_context = CryptContext(schemes=["bcrypt"], bcrypt__rounds=12, deprecated="auto")
 
 def convert_formdata_to_json(form_data):
@@ -198,6 +201,73 @@ async def login_user(request: Request, response: Response) -> ApiResponse:
             "user": logged_in_user, 
             "accessToken":access_token, 
             "refreshToken":refresh_token,
+        },
+        "User logged In Successfully"
+    )
+
+
+async def login_with_google(request: Request, response: Response) -> ApiResponse:
+    """
+    Authenticates a user via Google OAuth and logs them into the system.
+
+    Workflow:
+    1. Extracts the Google ID token from the incoming request JSON.
+    2. Validates the ID token by verifying it with Google's token info endpoint.
+    3. Confirms the token's audience matches the configured Google Client ID.
+    4. Extracts the user's email from the validated token.
+    5. Checks if a user with that email exists in the database.
+    6. Generates access and refresh JWT tokens for the user.
+    7. Sets HTTP-only, secure cookies with the generated tokens.
+    8. Returns the logged-in user's data along with the tokens.
+
+    Args:
+        request (Request): Incoming HTTP request containing the Google ID token in JSON body.
+        response (Response): HTTP response object used to set authentication cookies.
+
+    Returns:
+        ApiResponse: Custom API response containing user info and authentication tokens.
+    """
+    data = await request.json()
+    id_token = data.get("id_token")
+    
+    # DEBUG:
+    print(f"id_token: {id_token}")
+    
+    # verify token with Google
+    google_response = httpx.get(GOOGLE_TOKENINFO_URL.format(id_token))
+    response_data = google_response.json()
+    # DEBUG:
+    print(f"Response data: {response_data}")
+    
+    if response_data.get("aud") != GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="Invalid Google Client ID")
+    
+    email = response_data.get("email")
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="Email not found in Id token.")
+    
+    client, database = connect_db()
+    user_collection = database["users"]
+    
+    user = user_collection.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User does not exist")
+    
+    access_token, refresh_token = generate_access_and_refresh_token(user.get("_id"))
+    
+    logged_in_user = user_collection.find_one({"_id": user.get("_id")}, {"password":0, "refreshToken":0})    
+    logged_in_user["_id"] = str(logged_in_user["_id"])
+    
+    response.set_cookie("accessToken", value=access_token, httponly=True, secure=True)
+    response.set_cookie("refreshToken", value=refresh_token, httponly=True, secure=True)
+    
+    return ApiResponse(
+        200, 
+        {
+            "user": logged_in_user,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
         },
         "User logged In Successfully"
     )
@@ -626,54 +696,6 @@ async def get_user_watch_history(request: Request) -> ApiResponse:
         message="User watchHistory fetched successfully"
     )
 
-GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
-#################################################
-async def google_login(request: Request, response: Response):
-    data = await request.json()
-    token = data.get("id_token")  # frontend sends Google ID token here
-    print(f"token,: {token}")
-    # Verify token with Google
-    google_resp = httpx.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
-    payload = google_resp.json()
-
-    if payload.get("aud") != GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=400, detail="Invalid Google Client ID")
-
-    email = payload.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="Email not found in token")
-
-    client, database = connect_db()
-    user_collection = database["users"]
-
-    user = user_collection.find_one({"email": email})
-    if not user:
-        raise HTTPException(status_code=404, detail="User does not exist")
-
-    # generate your tokens for the user (no password check here)
-    access_token, refresh_token = generate_access_and_refresh_token(user.get("_id"))
-
-
-    logged_in_user = user_collection.find_one({"_id": user.get("_id")}, {"password":0, "refreshToken":0})
-    logged_in_user["_id"] = str(logged_in_user["_id"])
-    
-    # set cookies and respond
-    response.set_cookie("accessToken", value=access_token, httponly=True, secure=False)
-    response.set_cookie("refreshToken", value=refresh_token, httponly=True, secure=False)
-
-    # user["_id"] = str(user["_id"])
-    # user.pop("password", None)
-    # user.pop("refreshToken", None)
-
-    return ApiResponse(
-        200,
-        {
-            "user": logged_in_user,
-            "accessToken": access_token,
-            "refreshToken": refresh_token,
-        },
-        "User logged in via Google successfully"
-    )
 
 # validate Fields
 # check old password exists 

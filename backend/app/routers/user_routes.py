@@ -6,6 +6,7 @@ This module defines routes for user-related operations, including registration, 
 Routes:
     - POST /register: Registers a new user with an avatar and optional cover image.
     - POST /login: Authenticates and logs in a user.
+    - POST /auth/google: Google Authenticates and logs in a user.
     - POST /logout: Logs out a user (JWT required).
     - POST /change-password: Changes the user's password (JWT required).
     - GET /current-user: Retrieves the current authenticated user (JWT required).
@@ -32,7 +33,7 @@ from app.controllers.user_controller import update_avatar
 from app.controllers.user_controller import update_cover_image
 from app.controllers.user_controller import get_user_channel_profile
 from app.controllers.user_controller import get_user_watch_history
-from app.controllers.user_controller import google_login
+from app.controllers.user_controller import login_with_google
 
 from app.middlewares.auth_middlewares import verify_jwt
 
@@ -58,6 +59,14 @@ async def login_route(request: Request, response: Response):
     """
     return await login_user(request, response)
 
+
+@router.post("/auth/google")
+async def login_with_google_route(request: Request, response: Response):
+    """
+    Authenticates a user with Google validation and logs them into the system.
+    """
+    print(f"Request: {request}, Response: {response}")
+    return await login_with_google(request, response)
 
 # Secure
 @router.post("/logout", dependencies=[Depends(verify_jwt)])
@@ -92,7 +101,6 @@ async def update_account_details_route(request: Request):
     return await update_account_details(request)
 
 
-
 @router.patch("/avatar", dependencies=[Depends(verify_jwt)])
 async def update_avatar_route(request: Request, avatar: UploadFile = File(...)):
     """
@@ -125,8 +133,3 @@ async def get_watch_history_route(request: Request):
     Gets user watch history.
     """
     return await get_user_watch_history(request)
-
-@router.post("/auth/google")
-async def google_login_route(requst : Request, response: Response):
-    print(f"requst: {requst}or {response}")
-    return await google_login(requst, response) 
